@@ -491,6 +491,16 @@ TEST_RESULTS = {
             'content_object_abstract',
         ],
     },
+    'index_together': {
+        AbstractPerson: (),
+        BasePerson: (
+            ('content_type_base', 'object_id_base'),
+            ('content_type_abstract', 'object_id_abstract'),
+        ),
+        Person: (
+            ('content_type_concrete', 'object_id_concrete'),
+        )
+    }
 }
 
 
@@ -659,3 +669,11 @@ class GetFieldByNameTests(OptionsBaseTests):
         field_info = Person._meta.get_field_by_name('generic_relation_base')
         self.assertEqual(field_info[1:], (None, True, False))
         self.assertIsInstance(field_info[0], GenericRelation)
+
+
+class IndexTogetherTests(OptionsBaseTests):
+
+    def test_automatic_index_together(self):
+        for model, expected_result in TEST_RESULTS['index_together'].items():
+            index_together = model._meta.index_together
+            self.assertEqual(index_together, expected_result)

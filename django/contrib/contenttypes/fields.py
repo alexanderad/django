@@ -22,14 +22,17 @@ class GenericForeignKey(object):
     fields.
     """
 
-    def __init__(self, ct_field="content_type", fk_field="object_id", for_concrete_model=True):
+    def __init__(self, ct_field="content_type", fk_field="object_id", for_concrete_model=True,
+                 db_index=True):
         self.ct_field = ct_field
         self.fk_field = fk_field
         self.for_concrete_model = for_concrete_model
         self.editable = False
+        self.db_index = db_index
 
     def contribute_to_class(self, cls, name, **kwargs):
         self.name = name
+        self._parent_model = getattr(self, 'model', None)
         self.model = cls
         self.cache_attr = "_%s_cache" % name
         cls._meta.add_virtual_field(self)
@@ -37,6 +40,9 @@ class GenericForeignKey(object):
         # Only run pre-initialization field assignment on non-abstract models
         if not cls._meta.abstract:
             signals.pre_init.connect(self.instance_pre_init, sender=cls)
+
+            # Only non-abstract models may require index_together
+            self._maybe_add_db_index(cls)
 
         setattr(cls, name, self)
 
@@ -51,6 +57,23 @@ class GenericForeignKey(object):
         errors.extend(self._check_object_id_field())
         errors.extend(self._check_content_type_field())
         return errors
+
+    def _affects_index_together(self):
+        if self._parent_model is None or self._parent_model._meta.abstract:
+            return True
+        return False
+
+    def _maybe_add_db_index(self, cls):
+        if not self.db_index or not self._affects_index_together():
+            return
+
+        index_together = cls._meta.index_together
+        index_candidate = (self.ct_field, self.fk_field)
+
+        if not index_together:
+            cls._meta.index_together = (index_candidate,)
+        elif index_candidate not in index_together:
+            cls._meta.index_together = index_together + (index_candidate,)
 
     def _check_field_name(self):
         if self.name.endswith("_"):
